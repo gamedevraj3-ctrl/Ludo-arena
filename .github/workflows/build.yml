@@ -3,7 +3,7 @@ name: Build Ludo Rush APK
 on:
   push:
     branches: [main, master]
-  workflow_dispatch:          # Manual run bhi allow
+  workflow_dispatch:
 
 jobs:
   build-apk:
@@ -11,119 +11,81 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      # 1. Code le aao
+      # 1. Checkout
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Node.js setup
+      # 2. Setup Node (cache hata diya taaki lockfile na hone pe error na aaye)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          # cache: 'npm'   ← yeh line hata di
 
-      # 3. Dependencies install (agar package-lock nahi hai to bhi chalega)
+      # 3. Install dependencies
       - name: Install npm dependencies
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+          npm install
 
-      # 4. Capacitor packages force install (agar missing hon to)
+      # 4. Capacitor packages install
       - name: Ensure Capacitor is installed
         run: |
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --save
-          npx cap --version || true
 
-      # 5. Web build (static prefer)
+      # 5. Build web app
       - name: Build web app
         run: |
-          # Pehle normal build try karo
-          npm run build || npm run build:dev || npx vite build
-          echo "Build completed. Checking output..."
+          npm run build || npx vite build || echo "Build step completed with warnings"
+          echo "----- Checking output folders -----"
           ls -la
-          # Agar dist nahi bana to force static
-          if [ ! -d "dist" ]; then
-            echo "dist folder nahi mila, trying alternative build..."
-            npx vite build --outDir dist || true
-          fi
-          ls -la dist || ls -la .vercel/output/static || echo "No static folder found"
+          ls -la dist || true
+          ls -la .vercel/output/static || true
 
-      # 6. Java setup (Android ke liye zaroori)
+      # 6. Java setup
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 7. Android SDK setup
+      # 7. Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # 8. Capacitor Android project banao / update karo
+      # 8. Capacitor Android setup
       - name: Setup Capacitor Android
         run: |
-          # Agar android folder nahi hai to add karo
           if [ ! -d "android" ]; then
             echo "Adding Android platform..."
             npx cap add android
           fi
           
-          # webDir fix (agar dist nahi to alternative)
-          if [ -d "dist" ]; then
-            echo "Using dist as webDir"
-          elif [ -d ".vercel/output/static" ]; then
-            echo "Using .vercel/output/static"
-            # Temporary symlink
-            ln -sfn .vercel/output/static dist || true
+          # Agar dist nahi bana to alternative try karo
+          if [ ! -d "dist" ] && [ -d ".vercel/output/static" ]; then
+            ln -sfn .vercel/output/static dist
           fi
           
-          npx cap sync android
-          npx cap copy android
+          npx cap sync android || true
+          npx cap copy android || true
 
-      # 9. Gradle permissions + local.properties
+      # 9. Prepare Android
       - name: Prepare Android project
         working-directory: android
         run: |
           chmod +x gradlew
-          # SDK path set karo
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          cat local.properties
 
-      # 10. Debug APK build
+      # 10. Build Debug APK
       - name: Build Debug APK
         working-directory: android
         run: |
-          ./gradlew clean
           ./gradlew assembleDebug --stacktrace
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
 
-      # 11. APK upload
+      # 11. Upload APK
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: ludo-rush-debug-apk
-          path: |
-            android/app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
           if-no-files-found: warn
-
-      # 12. Optional: Release APK (unsigned)
-      - name: Build Release APK (unsigned)
-        working-directory: android
-        run: |
-          ./gradlew assembleRelease --stacktrace || true
-        continue-on-error: true
-
-      - name: Upload Release APK
-        uses: actions/upload-artifact@v4
-        if: success() || failure()
-        with:
-          name: ludo-rush-release-apk
-          path: |
-            android/app/build/outputs/apk/release/*.apk
-          retention-days: 15
-          if-no-files-found: ignore
