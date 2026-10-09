@@ -55,18 +55,17 @@ jobs:
           ls -la
           ls -la dist || true
           ls -la .vercel/output/static || true
-          # Create a minimal dist if none exists (for Capacitor)
           if [ ! -d "dist" ]; then
             echo "No dist found, creating minimal one for Capacitor..."
             mkdir -p dist
-            echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ludo Rush</title></head><body><div id="root"></div><script>alert("Build incomplete - check logs")</script></body></html>' > dist/index.html
+            echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ludo Rush</title></head><body><div id="root"></div></body></html>' > dist/index.html
           fi
 
-      - name: Setup Java 17
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Android SDK manually
         run: |
@@ -85,42 +84,28 @@ jobs:
           yes | sdkmanager --licenses || true
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
 
-      - name: Setup Capacitor Android (fixed)
+      - name: Setup Capacitor Android
         run: |
-          # Ensure capacitor.config exists
           if [ ! -f "capacitor.config.ts" ] && [ ! -f "capacitor.config.json" ]; then
             echo '{"appId":"com.ludorush.game","appName":"Ludo Rush","webDir":"dist"}' > capacitor.config.json
           fi
 
-          # Prefer dist
           if [ ! -d "dist" ] && [ -d ".vercel/output/static" ]; then
             ln -sfn .vercel/output/static dist
           fi
 
-          # Remove old android if broken
           if [ -d "android" ]; then
-            echo "Removing old android folder to regenerate cleanly..."
             rm -rf android
           fi
 
-          echo "Adding Android platform..."
           npx cap add android
-
-          echo "Syncing..."
           npx cap sync android
-
-          echo "===== Android folder contents ====="
-          ls -la android/
-          ls -la android/*.gradle || true
 
       - name: Prepare Android project
         working-directory: android
         run: |
           chmod +x gradlew
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          cat local.properties
-          echo "===== settings.gradle ====="
-          cat settings.gradle || true
 
       - name: Build Debug APK
         working-directory: android
