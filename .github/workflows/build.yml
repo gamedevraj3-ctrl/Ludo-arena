@@ -51,12 +51,7 @@ jobs:
       - name: Build web app
         run: |
           npm run build || npx vite build || true
-          echo "===== Looking for build output ====="
-          ls -la
-          ls -la dist || true
-          ls -la .vercel/output/static || true
           if [ ! -d "dist" ]; then
-            echo "No dist found, creating minimal one for Capacitor..."
             mkdir -p dist
             echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ludo Rush</title></head><body><div id="root"></div></body></html>' > dist/index.html
           fi
@@ -80,7 +75,6 @@ jobs:
             echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
             echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
           fi
-          echo "ANDROID_HOME is: $ANDROID_HOME"
           yes | sdkmanager --licenses || true
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
 
@@ -89,17 +83,40 @@ jobs:
           if [ ! -f "capacitor.config.ts" ] && [ ! -f "capacitor.config.json" ]; then
             echo '{"appId":"com.ludorush.game","appName":"Ludo Rush","webDir":"dist"}' > capacitor.config.json
           fi
-
-          if [ ! -d "dist" ] && [ -d ".vercel/output/static" ]; then
-            ln -sfn .vercel/output/static dist
-          fi
-
-          if [ -d "android" ]; then
-            rm -rf android
-          fi
-
+          if [ -d "android" ]; then rm -rf android; fi
           npx cap add android
           npx cap sync android
+
+      # ========== FIX KOTLIN DUPLICATE CLASSES ==========
+      - name: Fix Kotlin version conflict
+        working-directory: android
+        run: |
+          # Force consistent Kotlin version in root build.gradle
+          if [ -f build.gradle ]; then
+            echo "" >> build.gradle
+            echo "// Force Kotlin stdlib version to avoid duplicates" >> build.gradle
+            echo "configurations.all {" >> build.gradle
+            echo "    resolutionStrategy {" >> build.gradle
+            echo "        force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'" >> build.gradle
+            echo "        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.24'" >> build.gradle
+            echo "        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'" >> build.gradle
+            echo "    }" >> build.gradle
+            echo "}" >> build.gradle
+          fi
+
+          # Also in app/build.gradle if exists
+          if [ -f app/build.gradle ]; then
+            echo "" >> app/build.gradle
+            echo "configurations.all {" >> app/build.gradle
+            echo "    resolutionStrategy {" >> app/build.gradle
+            echo "        force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'" >> app/build.gradle
+            echo "        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.24'" >> app/build.gradle
+            echo "        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'" >> app/build.gradle
+            echo "    }" >> app/build.gradle
+            echo "}" >> app/build.gradle
+          fi
+
+          echo "Kotlin force applied"
 
       - name: Prepare Android project
         working-directory: android
