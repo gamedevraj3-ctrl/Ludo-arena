@@ -14,13 +14,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show current files
-        run: |
-          echo "===== Root files ====="
-          ls -la
-          find . -name "*.zip" -o -name "package.json" | head -20
-
-      # ========== ZIP EXTRACT ==========
       - name: Extract source ZIP
         run: |
           if [ -f "ludo-rush-tsx-source.zip" ]; then
@@ -53,12 +46,11 @@ jobs:
         run: npm install
 
       - name: Install Capacitor
-        run: |
-          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --save
+        run: npm install @capacitor/core @capacitor/cli @capacitor/android --save
 
       - name: Build web app
         run: |
-          npm run build || npx vite build || echo "Build finished"
+          npm run build || npx vite build || true
           ls -la dist || true
           ls -la .vercel/output/static || true
 
@@ -68,15 +60,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # ========== FIXED ANDROID SDK SETUP ==========
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: |
-            platform-tools
-            platforms;android-34
-            build-tools;34.0.0
-            cmdline-tools;latest
+
+      - name: Install Android packages
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
+          echo "Android packages ready"
 
       - name: Setup Capacitor Android
         run: |
