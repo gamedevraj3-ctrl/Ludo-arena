@@ -11,77 +11,90 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      # 1. Checkout
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Setup Node (cache hata diya taaki lockfile na hone pe error na aaye)
+      # ========== DEBUG: Structure dikhao ==========
+      - name: Show repository structure
+        run: |
+          echo "===== Current Directory ====="
+          pwd
+          echo ""
+          echo "===== Root files ====="
+          ls -la
+          echo ""
+          echo "===== Looking for package.json ====="
+          find . -name "package.json" | head -10
+          echo ""
+          echo "===== Looking for src folder ====="
+          find . -type d -name "src" | head -5
+
+      # ========== package.json check ==========
+      - name: Check package.json exists
+        run: |
+          if [ ! -f "package.json" ]; then
+            echo "❌ ERROR: package.json root mein nahi mila!"
+            echo ""
+            echo "Possible reasons:"
+            echo "1. Files kisi subfolder ke andar hain"
+            echo "2. package.json push nahi hua"
+            echo ""
+            echo "Solution: ZIP extract karke saari files repo ke ROOT mein daalo"
+            exit 1
+          else
+            echo "✅ package.json mil gaya"
+          fi
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # cache: 'npm'   ← yeh line hata di
 
-      # 3. Install dependencies
       - name: Install npm dependencies
-        run: |
-          npm install
+        run: npm install
 
-      # 4. Capacitor packages install
       - name: Ensure Capacitor is installed
         run: |
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --save
 
-      # 5. Build web app
       - name: Build web app
         run: |
-          npm run build || npx vite build || echo "Build step completed with warnings"
-          echo "----- Checking output folders -----"
+          npm run build || npx vite build || echo "Build finished with warnings"
+          echo "----- Output folders -----"
           ls -la
           ls -la dist || true
           ls -la .vercel/output/static || true
 
-      # 6. Java setup
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 7. Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # 8. Capacitor Android setup
       - name: Setup Capacitor Android
         run: |
           if [ ! -d "android" ]; then
-            echo "Adding Android platform..."
             npx cap add android
           fi
-          
-          # Agar dist nahi bana to alternative try karo
           if [ ! -d "dist" ] && [ -d ".vercel/output/static" ]; then
             ln -sfn .vercel/output/static dist
           fi
-          
           npx cap sync android || true
           npx cap copy android || true
 
-      # 9. Prepare Android
       - name: Prepare Android project
         working-directory: android
         run: |
           chmod +x gradlew
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
-      # 10. Build Debug APK
       - name: Build Debug APK
         working-directory: android
-        run: |
-          ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace
 
-      # 11. Upload APK
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
