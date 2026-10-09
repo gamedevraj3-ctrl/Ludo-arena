@@ -51,8 +51,16 @@ jobs:
       - name: Build web app
         run: |
           npm run build || npx vite build || true
+          echo "===== Looking for build output ====="
+          ls -la
           ls -la dist || true
           ls -la .vercel/output/static || true
+          # Create a minimal dist if none exists (for Capacitor)
+          if [ ! -d "dist" ]; then
+            echo "No dist found, creating minimal one for Capacitor..."
+            mkdir -p dist
+            echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ludo Rush</title></head><body><div id="root"></div><script>alert("Build incomplete - check logs")</script></body></html>' > dist/index.html
+          fi
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -60,40 +68,50 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # ========== MANUAL ANDROID SDK (no broken action) ==========
       - name: Setup Android SDK manually
         run: |
-          # Use the pre-installed SDK on the runner if available, otherwise install
           if [ -z "$ANDROID_HOME" ]; then
             export ANDROID_HOME=$HOME/android-sdk
             mkdir -p $ANDROID_HOME/cmdline-tools
-
-            # Download commandlinetools
             cd /tmp
             wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdtools.zip
             unzip -q cmdtools.zip -d $ANDROID_HOME/cmdline-tools
             mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
-
             echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
             echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
             echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
           fi
-
           echo "ANDROID_HOME is: $ANDROID_HOME"
           yes | sdkmanager --licenses || true
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
-          echo "Android SDK ready"
 
-      - name: Setup Capacitor Android
+      - name: Setup Capacitor Android (fixed)
         run: |
-          if [ ! -d "android" ]; then
-            npx cap add android
+          # Ensure capacitor.config exists
+          if [ ! -f "capacitor.config.ts" ] && [ ! -f "capacitor.config.json" ]; then
+            echo '{"appId":"com.ludorush.game","appName":"Ludo Rush","webDir":"dist"}' > capacitor.config.json
           fi
+
+          # Prefer dist
           if [ ! -d "dist" ] && [ -d ".vercel/output/static" ]; then
             ln -sfn .vercel/output/static dist
           fi
-          npx cap sync android || true
-          npx cap copy android || true
+
+          # Remove old android if broken
+          if [ -d "android" ]; then
+            echo "Removing old android folder to regenerate cleanly..."
+            rm -rf android
+          fi
+
+          echo "Adding Android platform..."
+          npx cap add android
+
+          echo "Syncing..."
+          npx cap sync android
+
+          echo "===== Android folder contents ====="
+          ls -la android/
+          ls -la android/*.gradle || true
 
       - name: Prepare Android project
         working-directory: android
@@ -101,6 +119,8 @@ jobs:
           chmod +x gradlew
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           cat local.properties
+          echo "===== settings.gradle ====="
+          cat settings.gradle || true
 
       - name: Build Debug APK
         working-directory: android
