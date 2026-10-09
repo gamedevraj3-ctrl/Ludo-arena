@@ -1,4 +1,4 @@
-name: Build Ludo Rush APK
+name: Build Ludo Rush APK (arm64)
 
 on:
   push:
@@ -8,60 +8,60 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ========== DEBUG: Structure dikhao ==========
-      - name: Show repository structure
+      - name: Show current files
         run: |
-          echo "===== Current Directory ====="
-          pwd
-          echo ""
           echo "===== Root files ====="
           ls -la
-          echo ""
-          echo "===== Looking for package.json ====="
-          find . -name "package.json" | head -10
-          echo ""
-          echo "===== Looking for src folder ====="
-          find . -type d -name "src" | head -5
+          find . -name "*.zip" -o -name "package.json" | head -20
 
-      # ========== package.json check ==========
-      - name: Check package.json exists
+      # ========== ZIP EXTRACT ==========
+      - name: Extract source ZIP
+        run: |
+          if [ -f "ludo-rush-tsx-source.zip" ]; then
+            echo "Found ludo-rush-tsx-source.zip — extracting..."
+            unzip -o ludo-rush-tsx-source.zip
+            if [ -d "ludo-rush-tsx" ]; then
+              echo "Moving files from ludo-rush-tsx/ to root..."
+              shopt -s dotglob
+              mv ludo-rush-tsx/* .
+              rmdir ludo-rush-tsx || true
+            fi
+            echo "===== After extract ====="
+            ls -la
+          else
+            echo "No ZIP found, assuming files are already in root"
+          fi
+
+      - name: Check package.json
         run: |
           if [ ! -f "package.json" ]; then
-            echo "❌ ERROR: package.json root mein nahi mila!"
-            echo ""
-            echo "Possible reasons:"
-            echo "1. Files kisi subfolder ke andar hain"
-            echo "2. package.json push nahi hua"
-            echo ""
-            echo "Solution: ZIP extract karke saari files repo ke ROOT mein daalo"
+            echo "ERROR: package.json still not found after extract"
+            find . -name "package.json"
             exit 1
-          else
-            echo "✅ package.json mil gaya"
           fi
+          echo "✅ package.json found"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install npm dependencies
+      - name: Install dependencies
         run: npm install
 
-      - name: Ensure Capacitor is installed
+      - name: Install Capacitor
         run: |
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --save
 
       - name: Build web app
         run: |
-          npm run build || npx vite build || echo "Build finished with warnings"
-          echo "----- Output folders -----"
-          ls -la
+          npm run build || npx vite build || echo "Build completed with warnings"
           ls -la dist || true
           ls -la .vercel/output/static || true
 
@@ -91,14 +91,18 @@ jobs:
           chmod +x gradlew
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
-      - name: Build Debug APK
+      - name: Build Debug APK (arm64)
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace
+
+      - name: List APK files
+        run: find android -name "*.apk" -type f
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: ludo-rush-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: ludo-rush-arm64-apk
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
           if-no-files-found: warn
