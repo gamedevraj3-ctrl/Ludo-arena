@@ -60,14 +60,29 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android packages
+      # ========== MANUAL ANDROID SDK (no broken action) ==========
+      - name: Setup Android SDK manually
         run: |
+          # Use the pre-installed SDK on the runner if available, otherwise install
+          if [ -z "$ANDROID_HOME" ]; then
+            export ANDROID_HOME=$HOME/android-sdk
+            mkdir -p $ANDROID_HOME/cmdline-tools
+
+            # Download commandlinetools
+            cd /tmp
+            wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdtools.zip
+            unzip -q cmdtools.zip -d $ANDROID_HOME/cmdline-tools
+            mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+
+            echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+            echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+            echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+          fi
+
+          echo "ANDROID_HOME is: $ANDROID_HOME"
           yes | sdkmanager --licenses || true
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
-          echo "Android packages ready"
+          echo "Android SDK ready"
 
       - name: Setup Capacitor Android
         run: |
@@ -84,7 +99,8 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          cat local.properties
 
       - name: Build Debug APK
         working-directory: android
