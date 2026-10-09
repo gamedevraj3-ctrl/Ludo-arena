@@ -24,24 +24,21 @@ jobs:
       - name: Extract source ZIP
         run: |
           if [ -f "ludo-rush-tsx-source.zip" ]; then
-            echo "Found ludo-rush-tsx-source.zip — extracting..."
+            echo "Found ZIP — extracting..."
             unzip -o ludo-rush-tsx-source.zip
             if [ -d "ludo-rush-tsx" ]; then
-              echo "Moving files from ludo-rush-tsx/ to root..."
+              echo "Moving files to root..."
               shopt -s dotglob
               mv ludo-rush-tsx/* .
               rmdir ludo-rush-tsx || true
             fi
-            echo "===== After extract ====="
             ls -la
-          else
-            echo "No ZIP found, assuming files are already in root"
           fi
 
       - name: Check package.json
         run: |
           if [ ! -f "package.json" ]; then
-            echo "ERROR: package.json still not found after extract"
+            echo "ERROR: package.json not found"
             find . -name "package.json"
             exit 1
           fi
@@ -61,7 +58,7 @@ jobs:
 
       - name: Build web app
         run: |
-          npm run build || npx vite build || echo "Build completed with warnings"
+          npm run build || npx vite build || echo "Build finished"
           ls -la dist || true
           ls -la .vercel/output/static || true
 
@@ -71,8 +68,15 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # ========== FIXED ANDROID SDK SETUP ==========
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platform-tools
+            platforms;android-34
+            build-tools;34.0.0
+            cmdline-tools;latest
 
       - name: Setup Capacitor Android
         run: |
@@ -91,7 +95,7 @@ jobs:
           chmod +x gradlew
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
-      - name: Build Debug APK (arm64)
+      - name: Build Debug APK
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace
 
@@ -102,7 +106,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ludo-rush-arm64-apk
-          path: |
-            android/app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
           if-no-files-found: warn
